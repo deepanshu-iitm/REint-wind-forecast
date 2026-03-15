@@ -1,8 +1,11 @@
-JAN_2024_START = "2024-01-01T00:00:00Z"
-JAN_2024_END = "2024-02-01T00:00:00Z"
+JAN_2024_SETTLEMENT_DATE_FROM = "2024-01-01"
+JAN_2024_SETTLEMENT_DATE_TO = "2024-01-31"
 
-FUELHH_ENDPOINT = "https://data.elexon.co.uk/bmrs/api/v1/datasets/FUELHH"
-WINDFOR_ENDPOINT = "https://data.elexon.co.uk/bmrs/api/v1/datasets/WINDFOR"
+JAN_2024_PUBLISH_FROM = "2024-01-01T00:00:00Z"
+JAN_2024_PUBLISH_TO = "2024-02-01T00:00:00Z"
+
+FUELHH_STREAM_ENDPOINT = "https://data.elexon.co.uk/bmrs/api/v1/datasets/FUELHH/stream"
+WINDFOR_STREAM_ENDPOINT = "https://data.elexon.co.uk/bmrs/api/v1/datasets/WINDFOR/stream"
 
 TARGET_FUEL_TYPE = "WIND"
 REQUEST_FORMAT = "json"

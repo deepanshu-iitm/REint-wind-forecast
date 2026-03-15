@@ -11,9 +11,9 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.append(str(BACKEND_ROOT))
 
 from app.services.constants import (
-    FUELHH_ENDPOINT,
-    JAN_2024_END,
-    JAN_2024_START,
+    FUELHH_STREAM_ENDPOINT,
+    JAN_2024_SETTLEMENT_DATE_FROM,
+    JAN_2024_SETTLEMENT_DATE_TO,
     TARGET_FUEL_TYPE,
 )
 from app.services.elexon_client import ElexonClient
@@ -25,25 +25,27 @@ def main() -> None:
 
     client = ElexonClient()
     params = {
-        "from": JAN_2024_START,
-        "to": JAN_2024_END,
-        "fuelType": TARGET_FUEL_TYPE,
+        "settlementDateFrom": JAN_2024_SETTLEMENT_DATE_FROM,
+        "settlementDateTo": JAN_2024_SETTLEMENT_DATE_TO,
+        "fuelType": [TARGET_FUEL_TYPE],
+        "format": "json",
     }
 
-    df = client.fetch_dataset(FUELHH_ENDPOINT, params=params)
+    df = client.fetch_dataset(FUELHH_STREAM_ENDPOINT, params=params)
 
     if df.empty:
         raise ValueError("No actual generation data returned from API.")
 
-    expected_columns = {"startTime", "generation"}
+    expected_columns = {"startTime", "generation", "fuelType", "settlementDate"}
     missing = expected_columns - set(df.columns)
     if missing:
         raise ValueError(f"Missing expected columns in actuals response: {missing}")
 
-    df = df.loc[:, ["startTime", "generation"]].copy()
+    df = df.loc[:, ["startTime", "settlementDate", "fuelType", "generation"]].copy()
     df["startTime"] = to_utc_datetime(df["startTime"])
     df["generation"] = pd.to_numeric(df["generation"], errors="coerce")
 
+    df = df[df["fuelType"] == TARGET_FUEL_TYPE]
     df = df.dropna(subset=["startTime", "generation"])
     df = df.sort_values("startTime").drop_duplicates(subset=["startTime"]).reset_index(drop=True)
 
@@ -51,6 +53,8 @@ def main() -> None:
     df.to_csv(output_path, index=False)
 
     print(f"Saved {len(df)} actual rows to {output_path}")
+    print(df.head())
+    print(df.tail())
 
 
 if __name__ == "__main__":
