@@ -1,65 +1,184 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type MonitoringItem = {
+  startTime: string | null;
+  actualGeneration: number | null;
+  forecastGeneration: number | null;
+  publishTime: string | null;
+  effectiveHorizonHours: number | null;
+  errorMW: number | null;
+  absErrorMW: number | null;
+};
+
+type MonitoringResponse = {
+  start: string;
+  end: string;
+  horizon: number;
+  count: number;
+  items: MonitoringItem[];
+};
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 export default function Home() {
+  const [start, setStart] = useState("2024-01-05T00:00");
+  const [end, setEnd] = useState("2024-01-06T23:30");
+  const [horizon, setHorizon] = useState(4);
+  const [data, setData] = useState<MonitoringResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const apiUrl = useMemo(() => {
+    const startIso = `${start}:00Z`;
+    const endIso = `${end}:00Z`;
+    return `${API_BASE_URL}/monitoring/timeseries?start=${encodeURIComponent(
+      startIso
+    )}&end=${encodeURIComponent(endIso)}&horizon=${horizon}`;
+  }, [start, end, horizon]);
+
+  async function loadData() {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(apiUrl);
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+
+      const json: MonitoringResponse = await response.json();
+      setData(json);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+  }, [apiUrl]);
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="min-h-screen bg-slate-50 p-6 text-slate-900">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold">Wind Forecast Monitoring</h1>
+          <p className="text-sm text-slate-600">
+            January 2024 UK wind generation — actuals vs latest eligible forecast.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+
+        <section className="grid gap-4 rounded-2xl bg-white p-4 shadow-sm md:grid-cols-3">
+          <label className="space-y-2">
+            <span className="text-sm font-medium">Start time (UTC)</span>
+            <input
+              type="datetime-local"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium">End time (UTC)</span>
+            <input
+              type="datetime-local"
+              value={end}
+              onChange={(e) => setEnd(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium">Forecast horizon: {horizon}h</span>
+            <input
+              type="range"
+              min={0}
+              max={48}
+              step={1}
+              value={horizon}
+              onChange={(e) => setHorizon(Number(e.target.value))}
+              className="w-full"
+            />
+          </label>
+        </section>
+
+        <section className="rounded-2xl bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-4">
+            <h2 className="text-lg font-semibold">API status</h2>
+            <button
+              onClick={loadData}
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div className="space-y-2 text-sm">
+            <p>
+              <span className="font-medium">Backend URL:</span> {API_BASE_URL}
+            </p>
+            <p className="break-all">
+              <span className="font-medium">Request:</span> {apiUrl}
+            </p>
+            {loading && <p>Loading data...</p>}
+            {error && <p className="text-red-600">Error: {error}</p>}
+            {data && !loading && (
+              <div className="space-y-1">
+                <p>
+                  <span className="font-medium">Returned rows:</span> {data.count}
+                </p>
+                <p>
+                  <span className="font-medium">Response horizon:</span> {data.horizon}h
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-2xl bg-white p-4 shadow-sm">
+          <h2 className="mb-3 text-lg font-semibold">Sample rows</h2>
+
+          {!data && !loading && !error && (
+            <p className="text-sm text-slate-600">No data loaded yet.</p>
+          )}
+
+          {data && (
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left">
+                    <th className="px-3 py-2">startTime</th>
+                    <th className="px-3 py-2">actual</th>
+                    <th className="px-3 py-2">forecast</th>
+                    <th className="px-3 py-2">publishTime</th>
+                    <th className="px-3 py-2">effective horizon</th>
+                    <th className="px-3 py-2">abs error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.items.slice(0, 12).map((item, index) => (
+                    <tr key={`${item.startTime}-${index}`} className="border-b border-slate-100">
+                      <td className="px-3 py-2">{item.startTime ?? "-"}</td>
+                      <td className="px-3 py-2">{item.actualGeneration ?? "-"}</td>
+                      <td className="px-3 py-2">{item.forecastGeneration ?? "-"}</td>
+                      <td className="px-3 py-2">{item.publishTime ?? "-"}</td>
+                      <td className="px-3 py-2">
+                        {item.effectiveHorizonHours ?? "-"}
+                      </td>
+                      <td className="px-3 py-2">{item.absErrorMW ?? "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
   );
 }
