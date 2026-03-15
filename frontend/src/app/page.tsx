@@ -1,6 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 type MonitoringItem = {
   startTime: string | null;
@@ -21,6 +31,23 @@ type MonitoringResponse = {
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+
+function formatNumber(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "-";
+  return new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 }).format(value);
+}
+
+function formatDateLabel(value: string | null): string {
+  if (!value) return "-";
+  const date = new Date(value);
+  return date.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  });
+}
 
 export default function Home() {
   const [start, setStart] = useState("2024-01-05T00:00");
@@ -62,15 +89,61 @@ export default function Home() {
     loadData();
   }, [apiUrl]);
 
+  const chartData = useMemo(() => {
+    if (!data) return [];
+    return data.items.map((item) => ({
+      ...item,
+      label: formatDateLabel(item.startTime),
+    }));
+  }, [data]);
+
+  const summary = useMemo(() => {
+    if (!data) {
+      return {
+        coveragePct: 0,
+        meanAbsError: null as number | null,
+        meanError: null as number | null,
+        maxAbsError: null as number | null,
+      };
+    }
+
+    const validForecasts = data.items.filter((item) => item.forecastGeneration !== null);
+    const validErrors = data.items
+      .map((item) => item.errorMW)
+      .filter((value): value is number => value !== null);
+    const validAbsErrors = data.items
+      .map((item) => item.absErrorMW)
+      .filter((value): value is number => value !== null);
+
+    const coveragePct =
+      data.items.length > 0 ? (validForecasts.length / data.items.length) * 100 : 0;
+
+    const meanError =
+      validErrors.length > 0
+        ? validErrors.reduce((sum, value) => sum + value, 0) / validErrors.length
+        : null;
+
+    const meanAbsError =
+      validAbsErrors.length > 0
+        ? validAbsErrors.reduce((sum, value) => sum + value, 0) / validAbsErrors.length
+        : null;
+
+    const maxAbsError =
+      validAbsErrors.length > 0 ? Math.max(...validAbsErrors) : null;
+
+    return { coveragePct, meanAbsError, meanError, maxAbsError };
+  }, [data]);
+
   return (
-    <main className="min-h-screen bg-slate-50 p-6 text-slate-900">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold">Wind Forecast Monitoring</h1>
+    <main className="min-h-screen bg-slate-50 p-4 text-slate-900 md:p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <section className="space-y-2">
+          <h1 className="text-3xl font-bold tracking-tight">Forecast Monitoring App</h1>
           <p className="text-sm text-slate-600">
-            January 2024 UK wind generation — actuals vs latest eligible forecast.
+            UK national wind generation, January 2024. The forecast line shows the latest
+            forecast published at least {horizon} hours before each target time.
           </p>
-        </div>
+        </section>
 
         <section className="grid gap-4 rounded-2xl bg-white p-4 shadow-sm md:grid-cols-3">
           <label className="space-y-2">
@@ -107,9 +180,39 @@ export default function Home() {
           </label>
         </section>
 
+        <section className="grid gap-4 md:grid-cols-4">
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <p className="text-sm text-slate-500">Returned points</p>
+            <p className="mt-2 text-2xl font-semibold">{data?.count ?? "-"}</p>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <p className="text-sm text-slate-500">Forecast coverage</p>
+            <p className="mt-2 text-2xl font-semibold">
+              {data ? `${summary.coveragePct.toFixed(1)}%` : "-"}
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <p className="text-sm text-slate-500">Mean absolute error</p>
+            <p className="mt-2 text-2xl font-semibold">{formatNumber(summary.meanAbsError)} MW</p>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <p className="text-sm text-slate-500">Mean error</p>
+            <p className="mt-2 text-2xl font-semibold">{formatNumber(summary.meanError)} MW</p>
+          </div>
+        </section>
+
         <section className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold">API status</h2>
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Actual vs forecast</h2>
+              <p className="text-sm text-slate-500">
+                Missing forecast points are intentionally left blank.
+              </p>
+            </div>
+
             <button
               onClick={loadData}
               className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white"
@@ -118,34 +221,55 @@ export default function Home() {
             </button>
           </div>
 
-          <div className="space-y-2 text-sm">
-            <p>
-              <span className="font-medium">Backend URL:</span> {API_BASE_URL}
-            </p>
-            <p className="break-all">
-              <span className="font-medium">Request:</span> {apiUrl}
-            </p>
-            {loading && <p>Loading data...</p>}
-            {error && <p className="text-red-600">Error: {error}</p>}
-            {data && !loading && (
-              <div className="space-y-1">
-                <p>
-                  <span className="font-medium">Returned rows:</span> {data.count}
-                </p>
-                <p>
-                  <span className="font-medium">Response horizon:</span> {data.horizon}h
-                </p>
-              </div>
-            )}
-          </div>
+          {loading && <p className="text-sm">Loading data...</p>}
+          {error && <p className="text-sm text-red-600">Error: {error}</p>}
+
+          {!loading && !error && data && (
+            <div className="h-[420px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} margin={{ top: 12, right: 16, left: 0, bottom: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="label"
+                    minTickGap={32}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    formatter={(value: number | null, name: string) => [
+                        value === null ? "-" : `${formatNumber(value)} MW`,
+                        name,
+                      ]}
+                      labelFormatter={(label) => `Time: ${label} UTC`}
+                  />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="actualGeneration"
+                    name="Actual generation"
+                    dot={false}
+                    stroke="#2563eb"
+                    strokeWidth={2}
+                    connectNulls={false}
+                  />
+
+                  <Line
+                    type="monotone"
+                    dataKey="forecastGeneration"
+                    name="Forecast generation"
+                    dot={{ r: 2 }}
+                    stroke="#16a34a"
+                    strokeWidth={3}
+                    connectNulls={true}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </section>
 
         <section className="rounded-2xl bg-white p-4 shadow-sm">
           <h2 className="mb-3 text-lg font-semibold">Sample rows</h2>
-
-          {!data && !loading && !error && (
-            <p className="text-sm text-slate-600">No data loaded yet.</p>
-          )}
 
           {data && (
             <div className="overflow-x-auto">
