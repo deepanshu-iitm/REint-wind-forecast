@@ -1,7 +1,6 @@
 # OS / editor
 .DS_Store
 Thumbs.db
-.vscode/
 .idea/
 
 # Logs
@@ -37,3 +36,5 @@ build/
 # Keep folder structure
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+config.bat
+node_modules
