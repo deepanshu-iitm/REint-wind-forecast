@@ -9,9 +9,11 @@ from app.services.monitoring import build_monitoring_dataset
 
 router = APIRouter(prefix="/monitoring", tags=["monitoring"])
 
-DATA_ROOT = Path(__file__).resolve().parents[3] / "data"
-ACTUALS_PATH = DATA_ROOT / "raw" / "actuals_jan_2024.csv"
-FORECASTS_PATH = DATA_ROOT / "raw" / "forecasts_jan_2024.csv"
+BASE_DIR = Path(__file__).resolve().parents[2]
+DATA_DIR = BASE_DIR / "data" / "raw"
+
+ACTUALS_PATH = DATA_DIR / "actuals_jan_2024.csv"
+FORECASTS_PATH = DATA_DIR / "forecasts_jan_2024.csv"
 
 
 def _load_csv(path: Path) -> pd.DataFrame:
