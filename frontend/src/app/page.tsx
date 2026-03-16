@@ -363,9 +363,9 @@ export default function Home() {
                       borderRadius: "12px",
                       color: "#e2e8f0",
                     }}
-                    formatter={(value: number | null, name: string) => [
-                      value === null ? "-" : `${formatNumber(value)} MW`,
-                      name,
+                    formatter={(value, name) => [
+                      value === null || value === undefined ? "-" : `${formatNumber(value as number)} MW`,
+                      name as string,
                     ]}
                     labelFormatter={(label) => `Time: ${label} UTC`}
                   />
