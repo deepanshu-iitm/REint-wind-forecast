@@ -228,6 +228,6 @@ This saves raw data into:
 
 ### Deployment
 
-- **Live app URL**: 
+- **Live app URL**: https://r-eint-wind-forecast.vercel.app/
 
 
