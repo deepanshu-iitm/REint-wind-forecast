@@ -1,37 +1,54 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from pathlib import Path
+
 import pandas as pd
+from fastapi import APIRouter, HTTPException, Query
 
 from app.services.monitoring import build_monitoring_dataset
-from app.services.utils import DATA_RAW_DIR
 
 router = APIRouter(prefix="/monitoring", tags=["monitoring"])
+
+DATA_ROOT = Path(__file__).resolve().parents[3] / "data"
+ACTUALS_PATH = DATA_ROOT / "raw" / "actuals_jan_2024.csv"
+FORECASTS_PATH = DATA_ROOT / "raw" / "forecasts_jan_2024.csv"
+
+
+def _load_csv(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        raise HTTPException(status_code=500, detail=f"Required data file not found: {path.name}")
+    return pd.read_csv(path)
 
 
 @router.get("/timeseries")
 def get_monitoring_timeseries(
-    start: str = Query(..., description="Start timestamp in ISO format"),
-    end: str = Query(..., description="End timestamp in ISO format"),
+    start: str = Query(..., description="Start datetime in ISO-8601 format"),
+    end: str = Query(..., description="End datetime in ISO-8601 format"),
     horizon: float = Query(..., ge=0, le=48, description="Forecast horizon in hours"),
 ) -> dict:
     try:
-        start_dt = pd.to_datetime(start, utc=True)
-        end_dt = pd.to_datetime(end, utc=True)
+        start_ts = pd.to_datetime(start, utc=True)
+        end_ts = pd.to_datetime(end, utc=True)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid datetime format: {exc}")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid datetime format. Use ISO-8601, for example 2024-01-05T00:00:00Z.",
+        ) from exc
 
-    if start_dt > end_dt:
-        raise HTTPException(status_code=400, detail="start must be before or equal to end")
+    if pd.isna(start_ts) or pd.isna(end_ts):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid datetime value provided.",
+        )
 
-    actuals_path = DATA_RAW_DIR / "actuals_jan_2024.csv"
-    forecasts_path = DATA_RAW_DIR / "forecasts_jan_2024.csv"
+    if start_ts >= end_ts:
+        raise HTTPException(
+            status_code=400,
+            detail="'start' must be earlier than 'end'.",
+        )
 
-    if not actuals_path.exists() or not forecasts_path.exists():
-        raise HTTPException(status_code=500, detail="Required raw data files are missing")
-
-    actuals_df = pd.read_csv(actuals_path)
-    forecasts_df = pd.read_csv(forecasts_path)
+    actuals_df = _load_csv(ACTUALS_PATH)
+    forecasts_df = _load_csv(FORECASTS_PATH)
 
     monitoring_df = build_monitoring_dataset(
         actuals_df=actuals_df,
@@ -39,31 +56,44 @@ def get_monitoring_timeseries(
         horizon_hours=horizon,
     )
 
-    monitoring_df["startTime"] = pd.to_datetime(monitoring_df["startTime"], utc=True, errors="coerce")
-    filtered = monitoring_df[
-        (monitoring_df["startTime"] >= start_dt) & (monitoring_df["startTime"] <= end_dt)
+    monitoring_df["startTime"] = pd.to_datetime(monitoring_df["startTime"], utc=True)
+
+    filtered_df = monitoring_df[
+        (monitoring_df["startTime"] >= start_ts) & (monitoring_df["startTime"] <= end_ts)
     ].copy()
 
-    filtered = filtered.sort_values("startTime")
+    filtered_df = filtered_df.sort_values("startTime")
 
-    records = []
-    for _, row in filtered.iterrows():
-        records.append(
+    items = []
+    for _, row in filtered_df.iterrows():
+        items.append(
             {
                 "startTime": row["startTime"].isoformat() if pd.notna(row["startTime"]) else None,
-                "actualGeneration": None if pd.isna(row["actual_generation"]) else float(row["actual_generation"]),
-                "forecastGeneration": None if pd.isna(row["forecast_generation"]) else float(row["forecast_generation"]),
-                "publishTime": None if pd.isna(row["publishTime"]) else pd.to_datetime(row["publishTime"], utc=True).isoformat(),
-                "effectiveHorizonHours": None if pd.isna(row["effective_horizon_hours"]) else float(row["effective_horizon_hours"]),
-                "errorMW": None if pd.isna(row["error_mw"]) else float(row["error_mw"]),
-                "absErrorMW": None if pd.isna(row["abs_error_mw"]) else float(row["abs_error_mw"]),
+                "actualGeneration": (
+                    int(row["actual_generation"]) if pd.notna(row["actual_generation"]) else None
+                ),
+                "forecastGeneration": (
+                    int(row["forecast_generation"]) if pd.notna(row["forecast_generation"]) else None
+                ),
+                "publishTime": (
+                    pd.to_datetime(row["publishTime"], utc=True).isoformat()
+                    if pd.notna(row["publishTime"])
+                    else None
+                ),
+                "effectiveHorizonHours": (
+                    float(row["effective_horizon_hours"])
+                    if pd.notna(row["effective_horizon_hours"])
+                    else None
+                ),
+                "errorMW": int(row["error_mw"]) if pd.notna(row["error_mw"]) else None,
+                "absErrorMW": int(row["abs_error_mw"]) if pd.notna(row["abs_error_mw"]) else None,
             }
         )
 
     return {
-        "start": start_dt.isoformat(),
-        "end": end_dt.isoformat(),
+        "start": start_ts.isoformat(),
+        "end": end_ts.isoformat(),
         "horizon": horizon,
-        "count": len(records),
-        "items": records,
+        "count": len(items),
+        "items": items,
     }
