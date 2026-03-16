@@ -33,9 +33,6 @@ frontend/dist/
 dist/
 build/
 
-# Data files
-data/raw/*
-data/processed/*
 
 # Keep folder structure
 !data/raw/.gitkeep
